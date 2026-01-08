@@ -16,7 +16,7 @@ Unity Package Manager 编辑器工具，用于创建、编辑和发布 UPM 包�
     }
   ],
   "dependencies": {
-    "com.azathrix.upm-editor": "1.0.2"
+    "com.azathrix.upm-editor": "*"
   }
 }
 ```
