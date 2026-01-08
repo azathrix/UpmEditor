@@ -1,8 +1,43 @@
-# UPM Editor
+<h1 align="center">UPM Editor</h1>
 
-Unity Package Manager 编辑器工具，用于创建、编辑和发布 UPM 包。
+<p align="center">
+  Unity Package Manager 编辑器工具，用于创建、编辑和发布 UPM 包
+</p>
+
+<p align="center">
+  <a href="https://github.com/Azathrix/UpmEditor"><img src="https://img.shields.io/badge/GitHub-UpmEditor-black.svg" alt="GitHub"></a>
+  <a href="https://www.npmjs.com/package/com.azathrix.upm-editor"><img src="https://img.shields.io/npm/v/com.azathrix.upm-editor.svg" alt="npm"></a>
+  <a href="https://github.com/Azathrix/UpmEditor/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://unity.com/"><img src="https://img.shields.io/badge/Unity-6000.3+-black.svg" alt="Unity"></a>
+</p>
+
+---
+
+## 特性
+
+- 创建 UPM 包，支持自定义模板
+- Inspector 编辑 package.json
+- 发布到 npm 官方、Verdaccio 或其他 npm 仓库
+- npm 登录状态检测
+- Unity 签名打包（Unity 6.3+）
+- 右键菜单快速操作
+- 自动同步 asmdef 文件
 
 ## 安装
+
+### 方式一：Package Manager（推荐）
+
+1. 打开 `Edit > Project Settings > Package Manager`
+2. 在 `Scoped Registries` 中添加：
+   - Name: `Azathrix`
+   - URL: `https://registry.npmjs.org`
+   - Scope(s): `com.azathrix`
+3. 点击 `Save`
+4. 打开 `Window > Package Manager`
+5. 切换到 `My Registries`
+6. 找到 `UPM Editor` 并安装
+
+### 方式二：修改 manifest.json
 
 在 `Packages/manifest.json` 中添加：
 
@@ -21,17 +56,11 @@ Unity Package Manager 编辑器工具，用于创建、编辑和发布 UPM 包�
 }
 ```
 
-> 注册 `com.azathrix` scope 后，可以在 Package Manager 的 "My Registries" 中发现更多 Azathrix 工具包。
+### 方式三：Git URL
 
-## 功能
-
-- **创建 UPM 包**: 通过向导创建新的 UPM 包，支持自定义模板
-- **Inspector 编辑**: 选中 UPM 包目录后在 Inspector 中直接编辑 package.json
-- **发布到 npm**: 支持发布到 npm 官方、Verdaccio 或其他 npm 仓库
-- **npm 登录状态检测**: 自动检测 npm 登录状态，显示当前登录用户
-- **Unity 签名打包**: 支持 Unity 6.3+ 的签名打包功能
-- **右键菜单**: 在 Project 窗口中右键快速操作
-- **自动同步 asmdef**: 修改包名时自动更新所有 asmdef 文件
+1. 打开 `Window > Package Manager`
+2. 点击 `+` > `Add package from git URL...`
+3. 输入：`https://github.com/Azathrix/UpmEditor.git`
 
 ## 使用方法
 
@@ -86,11 +115,6 @@ Unity Package Manager 编辑器工具，用于创建、编辑和发布 UPM 包�
 - `com.company.name1.name2` → `Company.Name1.Name2`
 - `com.company.name1-name2` → `Company.Name1Name2`
 
-## 要求
+## License
 
-- Unity 6000.3 或更高版本
-- npm（用于发布功能）
-
-## 许可证
-
-MIT License
+MIT
