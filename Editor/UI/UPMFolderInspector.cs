@@ -214,6 +214,10 @@ namespace Azathrix.UpmEditor.Editor.UI
                 EditorGUILayout.LabelField(new GUIContent("描述", "包的详细描述"));
                 _packageData.description = EditorGUILayout.TextArea(_packageData.description, GUILayout.MinHeight(60));
 
+                _packageData.license = EditorGUILayout.TextField(
+                    new GUIContent("许可证", "开源许可证类型，如 MIT、Apache-2.0"),
+                    _packageData.license);
+
                 EditorGUILayout.EndVertical();
             }
             EditorGUILayout.EndFoldoutHeaderGroup();

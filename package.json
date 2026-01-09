@@ -3,7 +3,8 @@
     "displayName": "UPM Editor",
     "version": "1.0.5",
     "unity": "6000.3",
-    "description": "UPM \u5305\u521b\u5efa\u3001\u7f16\u8f91\u548c\u53d1\u5e03\u5de5\u5177\u3002\u652f\u6301 Inspector \u53ef\u89c6\u5316\u7f16\u8f91\u3001npm \u53d1\u5e03\u3001asmdef \u81ea\u52a8\u540c\u6b65\u3002",
+    "description": "UPM 包创建、编辑和发布工具。支持 Inspector 可视化编辑、npm 发布、asmdef 自动同步。",
+    "license": "MIT",
     "keywords": [
         "upm",
         "package",
@@ -11,7 +12,7 @@
         "tools"
     ],
     "author": {
-        "name": "InputName"
+        "name": "azathrix"
     },
     "dependencies": {
     }

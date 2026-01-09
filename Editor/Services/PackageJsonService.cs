@@ -96,6 +96,7 @@ namespace  Azathrix.UpmEditor.Editor.Services
             data.version = GetJsonStringValue(json, "version");
             data.unity = GetJsonStringValue(json, "unity");
             data.description = GetJsonStringValue(json, "description");
+            data.license = GetJsonStringValue(json, "license");
             data.documentationUrl = GetJsonStringValue(json, "documentationUrl");
             data.changelogUrl = GetJsonStringValue(json, "changelogUrl");
             data.licensesUrl = GetJsonStringValue(json, "licensesUrl");
@@ -137,6 +138,10 @@ namespace  Azathrix.UpmEditor.Editor.Services
             sb.AppendLine($"    \"version\": \"{EscapeJson(data.version)}\",");
             sb.AppendLine($"    \"unity\": \"{EscapeJson(data.unity)}\",");
             sb.AppendLine($"    \"description\": \"{EscapeJson(data.description)}\",");
+
+            // License
+            if (!string.IsNullOrEmpty(data.license))
+                sb.AppendLine($"    \"license\": \"{EscapeJson(data.license)}\",");
 
             // Optional URL fields
             if (!string.IsNullOrEmpty(data.documentationUrl))

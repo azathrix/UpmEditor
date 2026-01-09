@@ -15,12 +15,15 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
     public class PackageDetailPanel
     {
         private bool _foldBasicInfo = true;
+        private bool _foldAuthor = true;
+        private bool _foldKeywords = true;
         private bool _foldDependencies = true;
         private bool _foldReverseDeps = true;
         private bool _foldChangelog = true;
 
         private string _newDepName = "";
         private string _newDepVersion = "1.0.0";
+        private string _newKeyword = "";
 
         // Version update dialog
         private bool _showVersionUpdateDialog;
@@ -68,6 +71,8 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             EditorGUILayout.Space(5);
 
             DrawBasicInfo(cache, pkg);
+            DrawAuthor(pkg);
+            DrawKeywords(pkg);
             DrawDependencies(pkg);
             DrawReverseDependencies(cache, pkg);
             DrawChangelog(pkg);
@@ -130,12 +135,95 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
                 if (EditorGUI.EndChangeCheck())
                     pkg.MarkDirty();
 
+                // License
+                EditorGUI.BeginChangeCheck();
+                pkg.Data.license = EditorGUILayout.TextField("许可证", pkg.Data.license);
+                if (EditorGUI.EndChangeCheck())
+                    pkg.MarkDirty();
+
+                // Visibility
+                EditorGUI.BeginChangeCheck();
+                var visibility = pkg.Data.hideInEditor ? DefaultVisibility.Hidden : DefaultVisibility.Visible;
+                visibility = (DefaultVisibility)EditorGUILayout.EnumPopup("默认显示", visibility);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    pkg.Data.hideInEditor = visibility == DefaultVisibility.Hidden;
+                    pkg.MarkDirty();
+                }
+
                 // Description
                 EditorGUILayout.LabelField("描述");
                 EditorGUI.BeginChangeCheck();
                 pkg.Data.description = EditorGUILayout.TextArea(pkg.Data.description, GUILayout.MinHeight(40));
                 if (EditorGUI.EndChangeCheck())
                     pkg.MarkDirty();
+
+                EditorGUILayout.EndVertical();
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+        }
+
+        private void DrawAuthor(PackageInfo pkg)
+        {
+            _foldAuthor = EditorGUILayout.BeginFoldoutHeaderGroup(_foldAuthor, "作者信息");
+            if (_foldAuthor)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+                if (pkg.Data.author == null)
+                    pkg.Data.author = new UPMPackageData.AuthorInfo();
+
+                EditorGUI.BeginChangeCheck();
+                pkg.Data.author.name = EditorGUILayout.TextField("姓名", pkg.Data.author.name);
+                pkg.Data.author.email = EditorGUILayout.TextField("邮箱", pkg.Data.author.email);
+                pkg.Data.author.url = EditorGUILayout.TextField("网址", pkg.Data.author.url);
+                if (EditorGUI.EndChangeCheck())
+                    pkg.MarkDirty();
+
+                EditorGUILayout.EndVertical();
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+        }
+
+        private void DrawKeywords(PackageInfo pkg)
+        {
+            if (pkg.Data.keywords == null)
+                pkg.Data.keywords = new System.Collections.Generic.List<string>();
+
+            _foldKeywords = EditorGUILayout.BeginFoldoutHeaderGroup(_foldKeywords,
+                $"关键词 ({pkg.Data.keywords.Count})");
+            if (_foldKeywords)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+                // Show keywords as removable buttons
+                EditorGUILayout.BeginHorizontal();
+                var toRemoveIdx = -1;
+                for (int i = 0; i < pkg.Data.keywords.Count; i++)
+                {
+                    if (GUILayout.Button($"{pkg.Data.keywords[i]} ×", EditorStyles.miniButton))
+                        toRemoveIdx = i;
+                }
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+                if (toRemoveIdx >= 0)
+                {
+                    pkg.Data.keywords.RemoveAt(toRemoveIdx);
+                    pkg.MarkDirty();
+                }
+
+                // Add new keyword
+                EditorGUILayout.BeginHorizontal();
+                _newKeyword = EditorGUILayout.TextField(_newKeyword);
+                GUI.enabled = !string.IsNullOrEmpty(_newKeyword) && !pkg.Data.keywords.Contains(_newKeyword);
+                if (GUILayout.Button("添加", GUILayout.Width(40)))
+                {
+                    pkg.Data.keywords.Add(_newKeyword);
+                    _newKeyword = "";
+                    pkg.MarkDirty();
+                }
+                GUI.enabled = true;
+                EditorGUILayout.EndHorizontal();
 
                 EditorGUILayout.EndVertical();
             }

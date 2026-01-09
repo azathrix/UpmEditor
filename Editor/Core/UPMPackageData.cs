@@ -24,6 +24,7 @@ namespace  Azathrix.UpmEditor.Editor.Core
         public string version = UPMConstants.DefaultVersion;
         public string unity = UPMConstants.DefaultUnityVersion;
         public string description = "";
+        public string license = "";
         public string documentationUrl = "";
         public string changelogUrl = "";
         public string licensesUrl = "";
@@ -52,6 +53,7 @@ namespace  Azathrix.UpmEditor.Editor.Core
                 version = version,
                 unity = unity,
                 description = description,
+                license = license,
                 documentationUrl = documentationUrl,
                 changelogUrl = changelogUrl,
                 licensesUrl = licensesUrl,
