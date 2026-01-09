@@ -25,7 +25,7 @@
 
 ## 安装
 
-### 方式一：Package Manager（推荐）
+### 方式一：Package Manager 添加 Scope（推荐）
 
 1. 打开 `Edit > Project Settings > Package Manager`
 2. 在 `Scoped Registries` 中添加：
@@ -37,30 +37,19 @@
 5. 切换到 `My Registries`
 6. 找到 `UPM Editor` 并安装
 
-### 方式二：修改 manifest.json
-
-在 `Packages/manifest.json` 中添加：
-
-```json
-{
-  "scopedRegistries": [
-    {
-      "name": "Azathrix",
-      "url": "https://registry.npmjs.org",
-      "scopes": ["com.azathrix"]
-    }
-  ],
-  "dependencies": {
-    "com.azathrix.upm-editor": "*"
-  }
-}
-```
-
-### 方式三：Git URL
+### 方式二：Git URL
 
 1. 打开 `Window > Package Manager`
 2. 点击 `+` > `Add package from git URL...`
-3. 输入：`https://github.com/Azathrix/UpmEditor.git`
+3. 输入：`https://github.com/Azathrix/UpmEditor.git#latest`
+
+### 方式三：npm 命令
+
+在项目的 `Packages` 目录下执行：
+
+```bash
+npm install com.azathrix.upm-editor
+```
 
 ## 使用方法
 
