@@ -16,6 +16,7 @@ namespace Azathrix.UpmEditor.Editor.Core
         // Menu paths
         public const string ContextMenuRoot = "Assets/UPM/";
         public const string ToolsMenuRoot = "Azathrix/UPM/";
+        public const string ManagerMenuPath = ToolsMenuRoot + "包管理器";
 
         // Default values
         public static string DefaultUnityVersion => Application.unityVersion.Substring(0, Application.unityVersion.LastIndexOf('.'));
@@ -24,6 +25,8 @@ namespace Azathrix.UpmEditor.Editor.Core
         // EditorPrefs keys
         public const string PrefsPrefix = "UPMEditor_";
         public const string PrefsRecentPackages = PrefsPrefix + "RecentPackages";
+        public const string PrefsManagerViewMode = PrefsPrefix + "ManagerViewMode";
+        public const string PrefsManagerSplitWidth = PrefsPrefix + "ManagerSplitWidth";
 
         // File templates
         public const string RuntimeAsmdefSuffix = "";

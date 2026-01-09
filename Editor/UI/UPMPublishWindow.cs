@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
 using System.IO;
 using Azathrix.UpmEditor.Editor.Core;
 using Azathrix.UpmEditor.Editor.Services;
@@ -30,6 +31,17 @@ namespace  Azathrix.UpmEditor.Editor.UI
         private bool _foldUnitySigning = true;
         private bool _saveCredentials;
 
+        // Batch mode
+        private List<BatchPackageInfo> _batchPackages = new List<BatchPackageInfo>();
+        private bool _isBatchMode;
+
+        private class BatchPackageInfo
+        {
+            public string Path;
+            public UPMPackageData Data;
+            public bool IsPublished;
+        }
+
         [MenuItem(UPMConstants.ToolsMenuRoot + "发布 UPM")]
         public static void ShowWindow()
         {
@@ -45,8 +57,29 @@ namespace  Azathrix.UpmEditor.Editor.UI
         {
             var window = GetWindow<UPMPublishWindow>("发布 UPM");
             window.minSize = new Vector2(400, 350);
+            window._isBatchMode = false;
+            window._batchPackages.Clear();
             window._packagePath = packagePath;
             window.LoadPackageData();
+        }
+
+        /// <summary>
+        /// 打开批量发布窗口
+        /// </summary>
+        public static void ShowBatchWindow(List<string> packagePaths)
+        {
+            var window = GetWindow<UPMPublishWindow>("批量发布 UPM");
+            window.minSize = new Vector2(500, 400);
+            window._isBatchMode = true;
+            window._batchPackages.Clear();
+            foreach (var path in packagePaths)
+            {
+                var data = PackageJsonService.ReadPackageJson(path);
+                if (data != null)
+                {
+                    window._batchPackages.Add(new BatchPackageInfo { Path = path, Data = data, IsPublished = false });
+                }
+            }
         }
 
         private void OnEnable()
@@ -134,6 +167,188 @@ namespace  Azathrix.UpmEditor.Editor.UI
             _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             EditorGUILayout.Space(10);
+
+            if (_isBatchMode)
+            {
+                DrawBatchMode();
+            }
+            else
+            {
+                DrawSingleMode();
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        private void DrawBatchMode()
+        {
+            EditorGUILayout.LabelField("批量发布 UPM", EditorStyles.boldLabel);
+            EditorGUILayout.Space(5);
+
+            DrawRegistrySettings();
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.LabelField($"待发布包 ({_batchPackages.Count})", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            foreach (var pkg in _batchPackages)
+            {
+                EditorGUILayout.BeginHorizontal();
+
+                // 状态图标
+                var statusIcon = pkg.IsPublished ? "✓" : "○";
+                var statusStyle = new GUIStyle(EditorStyles.label);
+                if (pkg.IsPublished) statusStyle.normal.textColor = Color.green;
+                GUILayout.Label(statusIcon, statusStyle, GUILayout.Width(20));
+
+                // 包信息
+                EditorGUILayout.LabelField(pkg.Data.displayName ?? pkg.Data.name, GUILayout.Width(180));
+                EditorGUILayout.LabelField(pkg.Data.version, GUILayout.Width(80));
+
+                // 单独发布按钮
+                GUI.enabled = !pkg.IsPublished && PublishService.IsNpmAvailable();
+                if (GUILayout.Button("发布", GUILayout.Width(50)))
+                {
+                    PublishSinglePackage(pkg);
+                }
+                GUI.enabled = true;
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(10);
+
+            // 批量发布按钮
+            var unpublishedCount = _batchPackages.FindAll(p => !p.IsPublished).Count;
+            GUI.enabled = unpublishedCount > 0 && PublishService.IsNpmAvailable();
+            if (GUILayout.Button($"发布全部未发布的包 ({unpublishedCount})", GUILayout.Height(30)))
+            {
+                PublishAllPackages();
+            }
+            GUI.enabled = true;
+
+            EditorGUILayout.Space(5);
+            EditorGUILayout.HelpBox("发布前请确保已登录 npm 并且版本号已更新", MessageType.Info);
+        }
+
+        private void PublishSinglePackage(BatchPackageInfo pkg)
+        {
+            if (!EditorUtility.DisplayDialog("发布确认",
+                $"发布 {pkg.Data.name}@{pkg.Data.version} 到:\n{_registry}",
+                "发布", "取消"))
+            {
+                return;
+            }
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "UPMEditor_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
+            Directory.CreateDirectory(tempDir);
+
+            EditorUtility.DisplayProgressBar("发布", $"正在打包 {pkg.Data.name}...", 0.3f);
+
+            try
+            {
+                var packResult = PublishService.PackWithoutSignature(pkg.Path, tempDir);
+                if (!packResult.Success)
+                {
+                    EditorUtility.ClearProgressBar();
+                    EditorUtility.DisplayDialog("打包失败", packResult.ErrorMessage, "确定");
+                    return;
+                }
+
+                EditorUtility.DisplayProgressBar("发布", "正在发布...", 0.7f);
+                var publishResult = PublishService.PublishTgz(packResult.TgzPath, _registry);
+                EditorUtility.ClearProgressBar();
+
+                if (publishResult.Success)
+                {
+                    pkg.IsPublished = true;
+                    EditorUtility.DisplayDialog("成功", $"{pkg.Data.name} 已发布", "确定");
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("发布失败", publishResult.ErrorMessage, "确定");
+                }
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+                if (Directory.Exists(tempDir))
+                {
+                    try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+        }
+
+        private void PublishAllPackages()
+        {
+            var toPublish = _batchPackages.FindAll(p => !p.IsPublished);
+            if (!EditorUtility.DisplayDialog("批量发布确认",
+                $"将发布 {toPublish.Count} 个包到:\n{_registry}",
+                "发布全部", "取消"))
+            {
+                return;
+            }
+
+            var successCount = 0;
+            var failedPackages = new List<string>();
+
+            for (int i = 0; i < toPublish.Count; i++)
+            {
+                var pkg = toPublish[i];
+                EditorUtility.DisplayProgressBar("批量发布", $"正在发布 {pkg.Data.name}...", (float)i / toPublish.Count);
+
+                var tempDir = Path.Combine(Path.GetTempPath(), "UPMEditor_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
+                Directory.CreateDirectory(tempDir);
+
+                try
+                {
+                    var packResult = PublishService.PackWithoutSignature(pkg.Path, tempDir);
+                    if (!packResult.Success)
+                    {
+                        failedPackages.Add($"{pkg.Data.name}: 打包失败 - {packResult.ErrorMessage}");
+                        continue;
+                    }
+
+                    var publishResult = PublishService.PublishTgz(packResult.TgzPath, _registry);
+                    if (publishResult.Success)
+                    {
+                        pkg.IsPublished = true;
+                        successCount++;
+                    }
+                    else
+                    {
+                        failedPackages.Add($"{pkg.Data.name}: {publishResult.ErrorMessage}");
+                    }
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir))
+                    {
+                        try { Directory.Delete(tempDir, true); } catch { }
+                    }
+                }
+            }
+
+            EditorUtility.ClearProgressBar();
+
+            if (failedPackages.Count == 0)
+            {
+                EditorUtility.DisplayDialog("完成", $"成功发布 {successCount} 个包", "确定");
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("部分完成",
+                    $"成功: {successCount}, 失败: {failedPackages.Count}\n\n失败列表:\n{string.Join("\n", failedPackages)}",
+                    "确定");
+            }
+
+            Repaint();
+        }
+
+        private void DrawSingleMode()
+        {
             EditorGUILayout.LabelField("UPM 包发布", EditorStyles.boldLabel);
             EditorGUILayout.Space(5);
 
@@ -153,8 +368,6 @@ namespace  Azathrix.UpmEditor.Editor.UI
 
             EditorGUILayout.Space(10);
             DrawHelp();
-
-            EditorGUILayout.EndScrollView();
         }
 
         private void DrawPackageSelection()
