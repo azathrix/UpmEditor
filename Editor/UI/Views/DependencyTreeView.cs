@@ -14,6 +14,14 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
     {
         private Dictionary<string, bool> _packageFoldouts = new Dictionary<string, bool>();
 
+        private static readonly Color ItemBgColor = new Color(0.2f, 0.2f, 0.2f);
+        private static readonly Color ItemAltBgColor = new Color(0.22f, 0.22f, 0.22f);
+        private static readonly Color DepBgColor = new Color(0.18f, 0.18f, 0.18f);
+        private static readonly Color SelectedBgColor = new Color(0.24f, 0.37f, 0.59f);
+        private static readonly Color HoverBgColor = new Color(0.28f, 0.28f, 0.28f);
+
+        private int _rowIndex;
+
         public void Draw(PackageCache cache, ref PackageInfo selectedPackage)
         {
             if (cache == null) return;
@@ -22,15 +30,25 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             var packages = new List<PackageInfo>(cache.Packages);
             packages.Sort((a, b) => string.Compare(a.Name, b.Name));
 
+            _rowIndex = 0;
+            bool clickedOnItem = false;
             foreach (var pkg in packages)
             {
-                DrawPackageNode(cache, pkg, ref selectedPackage, 0);
+                if (DrawPackageNode(cache, pkg, ref selectedPackage, 0))
+                    clickedOnItem = true;
+            }
+
+            // 点击空白区域清除选中
+            if (Event.current.type == EventType.MouseDown && !clickedOnItem)
+            {
+                selectedPackage = null;
+                GUI.changed = true;
             }
         }
 
-        private void DrawPackageNode(PackageCache cache, PackageInfo pkg, ref PackageInfo selectedPackage, int depth)
+        private bool DrawPackageNode(PackageCache cache, PackageInfo pkg, ref PackageInfo selectedPackage, int depth)
         {
-            if (pkg?.Data == null) return;
+            if (pkg?.Data == null) return false;
 
             var name = pkg.Name;
             var deps = cache.GetDependencies(name);
@@ -41,30 +59,57 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
                 _packageFoldouts[name] = false;
 
             var isSelected = pkg == selectedPackage;
-            var bgColor = isSelected ? new Color(0.24f, 0.37f, 0.59f) : Color.clear;
+            _rowIndex++;
 
             // Draw row
-            var rect = EditorGUILayout.BeginHorizontal();
-            if (isSelected)
-                EditorGUI.DrawRect(rect, bgColor);
+            var rect = EditorGUILayout.BeginHorizontal(GUILayout.Height(20));
+
+            // Hover检测
+            var isHover = rect.Contains(Event.current.mousePosition);
+            if (isHover && Event.current.type == EventType.Repaint)
+                EditorWindow.focusedWindow?.Repaint();
+
+            var bgColor = isSelected ? SelectedBgColor : (isHover ? HoverBgColor : (_rowIndex % 2 == 0 ? ItemBgColor : ItemAltBgColor));
+            EditorGUI.DrawRect(rect, bgColor);
+
+            bool clicked = false;
+            // 整行点击检测（排除checkbox和foldout区域）
+            var foldoutEnd = rect.x + 10 + depth * 20 + 18 + (hasDeps ? 18 : 0);
+            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
+            {
+                clicked = true;
+                if (Event.current.mousePosition.x > foldoutEnd)
+                {
+                    selectedPackage = pkg;
+                    Event.current.Use();
+                    GUI.changed = true;
+                }
+            }
 
             // Indent
-            GUILayout.Space(depth * 20);
+            GUILayout.Space(10 + depth * 20);
 
             // Checkbox
             pkg.IsSelected = EditorGUILayout.Toggle(pkg.IsSelected, GUILayout.Width(18));
 
-            // Foldout or bullet
+            // Foldout or space
             if (hasDeps)
             {
-                _packageFoldouts[name] = EditorGUILayout.Foldout(_packageFoldouts[name], "", true);
+                var foldoutRect = GUILayoutUtility.GetRect(18, 20, GUILayout.Width(18));
+                // 手动处理foldout点击
+                if (Event.current.type == EventType.MouseDown && foldoutRect.Contains(Event.current.mousePosition))
+                {
+                    _packageFoldouts[name] = !_packageFoldouts[name];
+                    Event.current.Use();
+                }
+                EditorGUI.Foldout(foldoutRect, _packageFoldouts[name], GUIContent.none);
             }
             else
             {
                 GUILayout.Space(18);
             }
 
-            // Package name (clickable)
+            // Package name
             var displayText = pkg.DisplayName;
             if (pkg.IsDirty)
                 displayText += " *";
@@ -73,10 +118,7 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             if (isSelected)
                 style.normal.textColor = Color.white;
 
-            if (GUILayout.Button(displayText, style))
-            {
-                selectedPackage = pkg;
-            }
+            GUILayout.Label(displayText, style);
 
             // Version
             GUILayout.FlexibleSpace();
@@ -90,38 +132,57 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
                 EditorGUI.indentLevel++;
                 foreach (var dep in deps)
                 {
-                    DrawDependencyNode(cache, pkg, dep, ref selectedPackage, depth + 1);
+                    if (DrawDependencyNode(cache, pkg, dep, ref selectedPackage, depth + 1))
+                        clicked = true;
                 }
                 EditorGUI.indentLevel--;
             }
+
+            return clicked;
         }
 
-        private void DrawDependencyNode(PackageCache cache, PackageInfo parent, PackageInfo dep, ref PackageInfo selectedPackage, int depth)
+        private bool DrawDependencyNode(PackageCache cache, PackageInfo parent, PackageInfo dep, ref PackageInfo selectedPackage, int depth)
         {
-            if (dep?.Data == null) return;
+            if (dep?.Data == null) return false;
 
             var isSelected = dep == selectedPackage;
-            var bgColor = isSelected ? new Color(0.24f, 0.37f, 0.59f) : Color.clear;
 
-            var rect = EditorGUILayout.BeginHorizontal();
-            if (isSelected)
-                EditorGUI.DrawRect(rect, bgColor);
+            var rect = EditorGUILayout.BeginHorizontal(GUILayout.Height(20));
+
+            // Hover检测
+            var isHover = rect.Contains(Event.current.mousePosition);
+            if (isHover && Event.current.type == EventType.Repaint)
+                EditorWindow.focusedWindow?.Repaint();
+
+            var bgColor = isSelected ? SelectedBgColor : (isHover ? HoverBgColor : DepBgColor);
+            EditorGUI.DrawRect(rect, bgColor);
+
+            bool clicked = false;
+            // 整行点击检测
+            var clickStart = rect.x + 10 + depth * 20 + 20;
+            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
+            {
+                clicked = true;
+                if (Event.current.mousePosition.x > clickStart)
+                {
+                    selectedPackage = dep;
+                    Event.current.Use();
+                    GUI.changed = true;
+                }
+            }
 
             // Indent
-            GUILayout.Space(depth * 20);
+            GUILayout.Space(10 + depth * 20);
 
             // Tree line indicator
             GUILayout.Label("└─", EditorStyles.miniLabel, GUILayout.Width(20));
 
-            // Package name (clickable)
+            // Package name
             var style = new GUIStyle(EditorStyles.label);
             if (isSelected)
                 style.normal.textColor = Color.white;
 
-            if (GUILayout.Button(dep.DisplayName, style))
-            {
-                selectedPackage = dep;
-            }
+            GUILayout.Label(dep.DisplayName, style);
 
             // Version from parent's dependency
             GUILayout.FlexibleSpace();
@@ -131,6 +192,7 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             GUILayout.Label($"({depVersion})", EditorStyles.miniLabel, GUILayout.Width(80));
 
             EditorGUILayout.EndHorizontal();
+            return clicked;
         }
     }
 }

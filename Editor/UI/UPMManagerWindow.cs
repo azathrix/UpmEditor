@@ -78,6 +78,12 @@ namespace Azathrix.UpmEditor.Editor.UI
 
         private void OnGUI()
         {
+            // 点击空白区域清除焦点
+            if (Event.current.type == EventType.MouseDown)
+            {
+                GUI.FocusControl(null);
+            }
+
             DrawToolbar();
 
             var toolbarHeight = EditorStyles.toolbar.fixedHeight;

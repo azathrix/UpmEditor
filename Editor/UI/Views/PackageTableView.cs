@@ -27,6 +27,11 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
         private TableSortColumn _sortColumn = TableSortColumn.Name;
         private bool _sortAscending = true;
 
+        private static readonly Color ItemBgColor = new Color(0.2f, 0.2f, 0.2f);
+        private static readonly Color ItemAltBgColor = new Color(0.22f, 0.22f, 0.22f);
+        private static readonly Color SelectedBgColor = new Color(0.24f, 0.37f, 0.59f);
+        private static readonly Color HoverBgColor = new Color(0.28f, 0.28f, 0.28f);
+
         public void Draw(PackageCache cache, ref PackageInfo selectedPackage)
         {
             if (cache == null) return;
@@ -39,9 +44,18 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             SortPackages(packages, cache);
 
             // Draw rows
-            foreach (var pkg in packages)
+            bool clickedOnItem = false;
+            for (int i = 0; i < packages.Count; i++)
             {
-                DrawRow(cache, pkg, ref selectedPackage);
+                if (DrawRow(cache, packages[i], ref selectedPackage, i % 2 == 0))
+                    clickedOnItem = true;
+            }
+
+            // 点击空白区域清除选中
+            if (Event.current.type == EventType.MouseDown && !clickedOnItem)
+            {
+                selectedPackage = null;
+                GUI.changed = true;
             }
         }
 
@@ -50,6 +64,7 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
             // Select all checkbox - 与行的Toggle对齐
+            GUILayout.Space(10);
             GUILayout.Label("", GUILayout.Width(18));
 
             // Name column
@@ -147,27 +162,43 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
             return cache.GetDependents(pkg.Name).Count;
         }
 
-        private void DrawRow(PackageCache cache, PackageInfo pkg, ref PackageInfo selectedPackage)
+        private bool DrawRow(PackageCache cache, PackageInfo pkg, ref PackageInfo selectedPackage, bool altRow)
         {
             var isSelected = pkg == selectedPackage;
-            var bgColor = isSelected ? new Color(0.24f, 0.37f, 0.59f) : Color.clear;
 
-            var rect = EditorGUILayout.BeginHorizontal();
-            if (isSelected)
-                EditorGUI.DrawRect(rect, bgColor);
+            var rect = EditorGUILayout.BeginHorizontal(GUILayout.Height(20));
+
+            // Hover检测
+            var isHover = rect.Contains(Event.current.mousePosition);
+            if (isHover && Event.current.type == EventType.Repaint)
+                EditorWindow.focusedWindow?.Repaint();
+
+            var bgColor = isSelected ? SelectedBgColor : (isHover ? HoverBgColor : (altRow ? ItemAltBgColor : ItemBgColor));
+            EditorGUI.DrawRect(rect, bgColor);
+
+            bool clicked = false;
+            // 整行点击检测 (排除 checkbox 区域)
+            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
+            {
+                clicked = true;
+                if (Event.current.mousePosition.x > rect.x + 28)
+                {
+                    selectedPackage = pkg;
+                    Event.current.Use();
+                    GUI.changed = true;
+                }
+            }
 
             // Checkbox
+            GUILayout.Space(10);
             pkg.IsSelected = EditorGUILayout.Toggle(pkg.IsSelected, GUILayout.Width(18));
 
-            // Name (clickable)
+            // Name
             var style = new GUIStyle(EditorStyles.label);
             if (isSelected)
                 style.normal.textColor = Color.white;
 
-            if (GUILayout.Button(pkg.DisplayName, style, GUILayout.Width(150)))
-            {
-                selectedPackage = pkg;
-            }
+            GUILayout.Label(pkg.DisplayName, style, GUILayout.Width(150));
 
             // Version
             GUILayout.Label(pkg.Version, GUILayout.Width(80));
@@ -184,6 +215,7 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
 
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
+            return clicked;
         }
     }
 }

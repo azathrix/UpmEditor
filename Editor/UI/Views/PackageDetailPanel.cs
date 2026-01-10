@@ -246,7 +246,7 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
                     foreach (var dep in pkg.Data.dependencies)
                     {
                         EditorGUILayout.BeginHorizontal();
-                        var newKey = EditorGUILayout.TextField(dep.Key, GUILayout.MinWidth(100));
+                        var newKey = EditorGUILayout.TextField(dep.Key);
                         var newVer = EditorGUILayout.TextField(dep.Value, GUILayout.Width(80));
                         if (newKey != dep.Key || newVer != dep.Value)
                             toUpdate.Add((dep.Key, newKey, newVer));
@@ -273,7 +273,7 @@ namespace Azathrix.UpmEditor.Editor.UI.Views
                 // Add new dependency
                 EditorGUILayout.Space(3);
                 EditorGUILayout.BeginHorizontal();
-                _newDepName = EditorGUILayout.TextField(_newDepName, GUILayout.MinWidth(100));
+                _newDepName = EditorGUILayout.TextField(_newDepName);
                 _newDepVersion = EditorGUILayout.TextField(_newDepVersion, GUILayout.Width(80));
                 GUI.enabled = !string.IsNullOrEmpty(_newDepName) &&
                               (pkg.Data.dependencies == null || !pkg.Data.dependencies.ContainsKey(_newDepName));

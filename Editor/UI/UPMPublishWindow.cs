@@ -22,7 +22,6 @@ namespace  Azathrix.UpmEditor.Editor.UI
         // npm login status
         private bool _npmLoggedIn;
         private string _npmUsername;
-        private double _lastLoginCheckTime;
 
         // Unity Signing
         private string _unityUsername;
@@ -34,6 +33,8 @@ namespace  Azathrix.UpmEditor.Editor.UI
         // Batch mode
         private List<BatchPackageInfo> _batchPackages = new List<BatchPackageInfo>();
         private bool _isBatchMode;
+        private bool _useBatchSigning;
+        private bool _useSingleSigning;
 
         private class BatchPackageInfo
         {
@@ -87,24 +88,37 @@ namespace  Azathrix.UpmEditor.Editor.UI
             _registry = PublishService.GetRegistry();
             _registryType = PublishService.GetRegistryType();
             _saveCredentials = PublishService.GetSaveCredentials();
+            _useSingleSigning = EditorPrefs.GetBool(UPMConstants.PrefsUseSigning, false);
+            _useBatchSigning = _useSingleSigning;
             if (_saveCredentials)
             {
                 _unityUsername = PublishService.GetUnityUsername();
                 _unityPassword = PublishService.GetUnityPassword();
                 _cloudOrgId = PublishService.GetCloudOrgId();
             }
+            // 从缓存读取登录状态
+            _npmLoggedIn = EditorPrefs.GetBool(UPMConstants.PrefsPrefix + "NpmLoggedIn", false);
+            _npmUsername = EditorPrefs.GetString(UPMConstants.PrefsPrefix + "NpmUsername", "");
             AutoDetectPackage();
-            CheckNpmLoginAsync();
         }
 
         private void CheckNpmLoginAsync()
         {
-            if (EditorApplication.timeSinceStartup - _lastLoginCheckTime < 30) return;
-            _lastLoginCheckTime = EditorApplication.timeSinceStartup;
-
-            var (loggedIn, username) = PublishService.CheckNpmLogin(_registry);
-            _npmLoggedIn = loggedIn;
-            _npmUsername = username;
+            // 异步检查登录状态
+            var registry = _registry;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var result = PublishService.CheckNpmLogin(registry);
+                EditorApplication.delayCall += () =>
+                {
+                    _npmLoggedIn = result.loggedIn;
+                    _npmUsername = result.username;
+                    // 缓存登录状态
+                    EditorPrefs.SetBool(UPMConstants.PrefsPrefix + "NpmLoggedIn", _npmLoggedIn);
+                    EditorPrefs.SetString(UPMConstants.PrefsPrefix + "NpmUsername", _npmUsername ?? "");
+                    Repaint();
+                };
+            });
         }
 
         /// <summary>
@@ -185,6 +199,9 @@ namespace  Azathrix.UpmEditor.Editor.UI
             EditorGUILayout.LabelField("批量发布 UPM", EditorStyles.boldLabel);
             EditorGUILayout.Space(5);
 
+            DrawBatchUnitySigning();
+            EditorGUILayout.Space(10);
+
             DrawRegistrySettings();
             EditorGUILayout.Space(10);
 
@@ -230,26 +247,98 @@ namespace  Azathrix.UpmEditor.Editor.UI
             GUI.enabled = true;
 
             EditorGUILayout.Space(5);
-            EditorGUILayout.HelpBox("发布前请确保已登录 npm 并且版本号已更新", MessageType.Info);
+            var signTip = _useBatchSigning ? "使用 Unity 签名打包" : "使用 npm pack（无签名）";
+            EditorGUILayout.HelpBox($"发布前请确保已登录 npm 并且版本号已更新\n当前模式: {signTip}", MessageType.Info);
+        }
+
+        private void DrawBatchUnitySigning()
+        {
+            _foldUnitySigning = EditorGUILayout.BeginFoldoutHeaderGroup(_foldUnitySigning, "Unity 签名配置 (Unity 6.3+)");
+            if (_foldUnitySigning)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+                EditorGUI.BeginChangeCheck();
+                _useBatchSigning = EditorGUILayout.Toggle(
+                    new GUIContent("启用签名打包", "批量发布时使用 Unity 签名"),
+                    _useBatchSigning);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorPrefs.SetBool(UPMConstants.PrefsUseSigning, _useBatchSigning);
+                }
+
+                GUI.enabled = _useBatchSigning;
+
+                _unityUsername = EditorGUILayout.TextField(
+                    new GUIContent("Unity ID 邮箱", "Unity 账号邮箱"),
+                    _unityUsername);
+
+                _unityPassword = EditorGUILayout.PasswordField(
+                    new GUIContent("密码", "Unity 账号密码"),
+                    _unityPassword);
+
+                _cloudOrgId = EditorGUILayout.TextField(
+                    new GUIContent("Organization ID", "Unity Cloud Organization ID"),
+                    _cloudOrgId);
+
+                EditorGUI.BeginChangeCheck();
+                _saveCredentials = EditorGUILayout.Toggle(
+                    new GUIContent("记住凭据", "加密保存账号密码到本地"),
+                    _saveCredentials);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    PublishService.SetSaveCredentials(_saveCredentials);
+                    if (!_saveCredentials)
+                    {
+                        PublishService.ClearCredentials();
+                    }
+                }
+
+                GUI.enabled = true;
+
+                if (_useBatchSigning && (string.IsNullOrEmpty(_unityUsername) || string.IsNullOrEmpty(_unityPassword) || string.IsNullOrEmpty(_cloudOrgId)))
+                {
+                    EditorGUILayout.HelpBox("启用签名需要填写完整的 Unity 凭据", MessageType.Warning);
+                }
+
+                EditorGUILayout.EndVertical();
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
         }
 
         private void PublishSinglePackage(BatchPackageInfo pkg)
         {
+            var signMode = _useBatchSigning ? "（签名）" : "（无签名）";
             if (!EditorUtility.DisplayDialog("发布确认",
-                $"发布 {pkg.Data.name}@{pkg.Data.version} 到:\n{_registry}",
+                $"发布 {pkg.Data.name}@{pkg.Data.version} 到:\n{_registry}\n{signMode}",
                 "发布", "取消"))
             {
                 return;
             }
 
+            if (_useBatchSigning)
+            {
+                SaveCredentialsIfEnabled();
+            }
+
             var tempDir = Path.Combine(Path.GetTempPath(), "UPMEditor_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
             Directory.CreateDirectory(tempDir);
 
-            EditorUtility.DisplayProgressBar("发布", $"正在打包 {pkg.Data.name}...", 0.3f);
+            var packingMsg = _useBatchSigning ? "正在签名打包" : "正在打包";
+            EditorUtility.DisplayProgressBar("发布", $"{packingMsg} {pkg.Data.name}...", 0.3f);
 
             try
             {
-                var packResult = PublishService.PackWithoutSignature(pkg.Path, tempDir);
+                PackResult packResult;
+                if (_useBatchSigning)
+                {
+                    packResult = PublishService.PackWithSignature(pkg.Path, tempDir, _unityUsername, _unityPassword, _cloudOrgId);
+                }
+                else
+                {
+                    packResult = PublishService.PackWithoutSignature(pkg.Path, tempDir);
+                }
+
                 if (!packResult.Success)
                 {
                     EditorUtility.ClearProgressBar();
@@ -284,11 +373,17 @@ namespace  Azathrix.UpmEditor.Editor.UI
         private void PublishAllPackages()
         {
             var toPublish = _batchPackages.FindAll(p => !p.IsPublished);
+            var signMode = _useBatchSigning ? "（签名）" : "（无签名）";
             if (!EditorUtility.DisplayDialog("批量发布确认",
-                $"将发布 {toPublish.Count} 个包到:\n{_registry}",
+                $"将发布 {toPublish.Count} 个包到:\n{_registry}\n{signMode}",
                 "发布全部", "取消"))
             {
                 return;
+            }
+
+            if (_useBatchSigning)
+            {
+                SaveCredentialsIfEnabled();
             }
 
             var successCount = 0;
@@ -297,14 +392,24 @@ namespace  Azathrix.UpmEditor.Editor.UI
             for (int i = 0; i < toPublish.Count; i++)
             {
                 var pkg = toPublish[i];
-                EditorUtility.DisplayProgressBar("批量发布", $"正在发布 {pkg.Data.name}...", (float)i / toPublish.Count);
+                var packingMsg = _useBatchSigning ? "正在签名打包" : "正在打包";
+                EditorUtility.DisplayProgressBar("批量发布", $"{packingMsg} {pkg.Data.name}...", (float)i / toPublish.Count);
 
                 var tempDir = Path.Combine(Path.GetTempPath(), "UPMEditor_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
                 Directory.CreateDirectory(tempDir);
 
                 try
                 {
-                    var packResult = PublishService.PackWithoutSignature(pkg.Path, tempDir);
+                    PackResult packResult;
+                    if (_useBatchSigning)
+                    {
+                        packResult = PublishService.PackWithSignature(pkg.Path, tempDir, _unityUsername, _unityPassword, _cloudOrgId);
+                    }
+                    else
+                    {
+                        packResult = PublishService.PackWithoutSignature(pkg.Path, tempDir);
+                    }
+
                     if (!packResult.Success)
                     {
                         failedPackages.Add($"{pkg.Data.name}: 打包失败 - {packResult.ErrorMessage}");
@@ -416,6 +521,17 @@ namespace  Azathrix.UpmEditor.Editor.UI
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
+                EditorGUI.BeginChangeCheck();
+                _useSingleSigning = EditorGUILayout.Toggle(
+                    new GUIContent("启用签名打包", "发布时使用 Unity 签名"),
+                    _useSingleSigning);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorPrefs.SetBool(UPMConstants.PrefsUseSigning, _useSingleSigning);
+                }
+
+                GUI.enabled = _useSingleSigning;
+
                 _unityUsername = EditorGUILayout.TextField(
                     new GUIContent("Unity ID 邮箱", "Unity 账号邮箱"),
                     _unityUsername);
@@ -441,32 +557,12 @@ namespace  Azathrix.UpmEditor.Editor.UI
                     }
                 }
 
-                EditorGUILayout.HelpBox(
-                    "Unity 6.3+ 要求包必须有签名才能安装。\n" +
-                    "Organization ID 可在 Unity Cloud Dashboard 获取。",
-                    MessageType.Info);
-
-                EditorGUILayout.Space(5);
-
-                var canSign = _packageData != null &&
-                              !string.IsNullOrEmpty(_unityUsername) &&
-                              !string.IsNullOrEmpty(_unityPassword) &&
-                              !string.IsNullOrEmpty(_cloudOrgId);
-
-                GUI.enabled = canSign;
-                if (GUILayout.Button(new GUIContent("签名打包 (.tgz)", "使用 Unity 打包带签名的 tgz 文件"), GUILayout.Height(25)))
-                {
-                    SaveCredentialsIfEnabled();
-                    PackWithSignature();
-                }
-
-                GUI.enabled = canSign && PublishService.IsNpmAvailable();
-                if (GUILayout.Button(new GUIContent("签名打包并发布", "打包签名后发布到 Registry"), GUILayout.Height(25)))
-                {
-                    SaveCredentialsIfEnabled();
-                    PackAndPublishWithSignature();
-                }
                 GUI.enabled = true;
+
+                if (_useSingleSigning && (string.IsNullOrEmpty(_unityUsername) || string.IsNullOrEmpty(_unityPassword) || string.IsNullOrEmpty(_cloudOrgId)))
+                {
+                    EditorGUILayout.HelpBox("启用签名需要填写完整的 Unity 凭据", MessageType.Warning);
+                }
 
                 EditorGUILayout.EndVertical();
             }
@@ -507,12 +603,11 @@ namespace  Azathrix.UpmEditor.Editor.UI
                         break;
                 }
                 PublishService.SetRegistry(_registry);
-                _lastLoginCheckTime = 0;
                 CheckNpmLoginAsync();
             }
 
             // Custom URL input
-            GUI.enabled = _registryType == PublishService.RegistryType.Custom;
+            GUI.enabled = _registryType != PublishService.RegistryType.NpmOfficial;
             EditorGUI.BeginChangeCheck();
             _registry = EditorGUILayout.TextField(
                 new GUIContent("Registry URL", "npm registry 地址"),
@@ -520,7 +615,6 @@ namespace  Azathrix.UpmEditor.Editor.UI
             if (EditorGUI.EndChangeCheck())
             {
                 PublishService.SetRegistry(_registry);
-                _lastLoginCheckTime = 0;
                 CheckNpmLoginAsync();
             }
             GUI.enabled = true;
@@ -540,7 +634,6 @@ namespace  Azathrix.UpmEditor.Editor.UI
                 EditorGUILayout.HelpBox("未登录 npm，发布前请先登录", MessageType.Warning);
                 if (GUILayout.Button("刷新登录状态"))
                 {
-                    _lastLoginCheckTime = 0;
                     CheckNpmLoginAsync();
                 }
                 EditorGUILayout.HelpBox($"登录命令: npm login --registry {_registry}", MessageType.None);
@@ -566,17 +659,19 @@ namespace  Azathrix.UpmEditor.Editor.UI
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // Pack without signature
+            var signTip = _useSingleSigning ? "签名" : "无签名";
+
+            // Pack
             GUI.enabled = _packageData != null && PublishService.IsNpmAvailable();
-            if (GUILayout.Button(new GUIContent("打包 (.tgz)", "使用 npm pack 打包（无签名）"), GUILayout.Height(25)))
+            if (GUILayout.Button(new GUIContent($"打包 (.tgz) [{signTip}]", "打包为 tgz 文件"), GUILayout.Height(25)))
             {
-                PackWithoutSignature();
+                PackPackage();
             }
 
-            // Pack and publish without signature
-            if (GUILayout.Button(new GUIContent("打包并发布", "打包后发布到 Registry（无签名）"), GUILayout.Height(25)))
+            // Pack and publish
+            if (GUILayout.Button(new GUIContent($"打包并发布 [{signTip}]", "打包后发布到 Registry"), GUILayout.Height(25)))
             {
-                PackAndPublishWithoutSignature();
+                PackAndPublish();
             }
 
             EditorGUILayout.Space(5);
@@ -618,43 +713,82 @@ namespace  Azathrix.UpmEditor.Editor.UI
                 MessageType.Info);
         }
 
-        private void PackWithoutSignature()
+        private void PackPackage()
         {
             var outputPath = EditorUtility.SaveFolderPanel("选择输出目录", _packagePath, "");
             if (string.IsNullOrEmpty(outputPath)) return;
 
-            EditorUtility.DisplayProgressBar("打包", "正在打包...", 0.5f);
-            var result = PublishService.PackWithoutSignature(_packagePath, outputPath);
-            EditorUtility.ClearProgressBar();
-
-            if (result.Success)
+            if (_useSingleSigning)
             {
-                EditorUtility.DisplayDialog("成功", $"包已生成:\n{result.TgzPath}", "确定");
-                EditorUtility.RevealInFinder(result.TgzPath);
+                SaveCredentialsIfEnabled();
             }
-            else
+
+            var packingMsg = _useSingleSigning ? "正在签名打包..." : "正在打包...";
+            EditorUtility.DisplayProgressBar("打包", packingMsg, 0.5f);
+
+            try
             {
-                EditorUtility.DisplayDialog("错误", result.ErrorMessage, "确定");
+                PackResult result;
+                if (_useSingleSigning)
+                {
+                    result = PublishService.PackWithSignature(_packagePath, outputPath, _unityUsername, _unityPassword, _cloudOrgId);
+                }
+                else
+                {
+                    result = PublishService.PackWithoutSignature(_packagePath, outputPath);
+                }
+
+                EditorUtility.ClearProgressBar();
+
+                if (result.Success)
+                {
+                    EditorUtility.DisplayDialog("成功", $"包已生成:\n{result.TgzPath}", "确定");
+                    EditorUtility.RevealInFinder(result.TgzPath);
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("错误", result.ErrorMessage, "确定");
+                }
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
             }
         }
 
-        private void PackAndPublishWithoutSignature()
+        private void PackAndPublish()
         {
+            var signMode = _useSingleSigning ? "（签名）" : "（无签名）";
             if (!EditorUtility.DisplayDialog("发布确认",
-                $"打包并发布 {_packageData.name}@{_packageData.version} 到:\n{_registry}\n\n注意: 无签名包在 Unity 6.3+ 可能无法安装",
+                $"打包并发布 {_packageData.name}@{_packageData.version} 到:\n{_registry}\n{signMode}",
                 "发布", "取消"))
             {
                 return;
             }
 
+            if (_useSingleSigning)
+            {
+                SaveCredentialsIfEnabled();
+            }
+
             var tempDir = Path.Combine(Path.GetTempPath(), "UPMEditor_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
             Directory.CreateDirectory(tempDir);
 
-            EditorUtility.DisplayProgressBar("打包", "正在打包...", 0.3f);
+            var packingMsg = _useSingleSigning ? "正在签名打包..." : "正在打包...";
+            EditorUtility.DisplayProgressBar("打包", packingMsg, 0.3f);
 
             try
             {
-                var packResult = PublishService.PackWithoutSignature(_packagePath, tempDir);
+                PackResult packResult;
+                if (_useSingleSigning)
+                {
+                    packResult = PublishService.PackWithSignature(_packagePath, tempDir, _unityUsername, _unityPassword, _cloudOrgId);
+                }
+                else
+                {
+                    packResult = PublishService.PackWithoutSignature(_packagePath, tempDir);
+                }
+
                 if (!packResult.Success)
                 {
                     EditorUtility.ClearProgressBar();
@@ -678,86 +812,6 @@ namespace  Azathrix.UpmEditor.Editor.UI
             finally
             {
                 EditorUtility.ClearProgressBar();
-                if (Directory.Exists(tempDir))
-                {
-                    try { Directory.Delete(tempDir, true); } catch { }
-                }
-            }
-        }
-
-        private void PackWithSignature()
-        {
-            var outputPath = EditorUtility.SaveFolderPanel("选择输出目录", _packagePath, "");
-            if (string.IsNullOrEmpty(outputPath)) return;
-
-            EditorUtility.DisplayProgressBar("打包签名包", "正在调用 Unity 打包...", 0.5f);
-
-            try
-            {
-                var result = PublishService.PackWithSignature(_packagePath, outputPath, _unityUsername, _unityPassword, _cloudOrgId);
-                EditorUtility.ClearProgressBar();
-
-                if (result.Success)
-                {
-                    EditorUtility.DisplayDialog("成功", $"签名包已生成:\n{result.TgzPath}", "确定");
-                    EditorUtility.RevealInFinder(result.TgzPath);
-                }
-                else
-                {
-                    EditorUtility.DisplayDialog("错误", result.ErrorMessage, "确定");
-                }
-            }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-            }
-        }
-
-        private void PackAndPublishWithSignature()
-        {
-            if (!EditorUtility.DisplayDialog("发布确认",
-                $"打包签名并发布 {_packageData.name}@{_packageData.version} 到:\n{_registry}",
-                "发布", "取消"))
-            {
-                return;
-            }
-
-            // 使用临时目录
-            var tempDir = Path.Combine(Path.GetTempPath(), "UPMEditor_" + System.Guid.NewGuid().ToString("N").Substring(0, 8));
-            Directory.CreateDirectory(tempDir);
-
-            EditorUtility.DisplayProgressBar("打包签名包", "正在调用 Unity 打包...", 0.3f);
-
-            try
-            {
-                var packResult = PublishService.PackWithSignature(_packagePath, tempDir, _unityUsername, _unityPassword, _cloudOrgId);
-
-                if (!packResult.Success)
-                {
-                    EditorUtility.ClearProgressBar();
-                    EditorUtility.DisplayDialog("打包失败", packResult.ErrorMessage, "确定");
-                    return;
-                }
-
-                EditorUtility.DisplayProgressBar("发布", "正在发布到 Registry...", 0.7f);
-
-                var publishResult = PublishService.PublishTgz(packResult.TgzPath, _registry);
-
-                EditorUtility.ClearProgressBar();
-
-                if (publishResult.Success)
-                {
-                    EditorUtility.DisplayDialog("成功", $"签名包已发布到 {_registry}", "确定");
-                }
-                else
-                {
-                    EditorUtility.DisplayDialog("发布失败", publishResult.ErrorMessage, "确定");
-                }
-            }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-                // 清理临时目录
                 if (Directory.Exists(tempDir))
                 {
                     try { Directory.Delete(tempDir, true); } catch { }

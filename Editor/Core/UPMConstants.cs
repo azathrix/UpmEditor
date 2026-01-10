@@ -27,6 +27,7 @@ namespace Azathrix.UpmEditor.Editor.Core
         public const string PrefsRecentPackages = PrefsPrefix + "RecentPackages";
         public const string PrefsManagerViewMode = PrefsPrefix + "ManagerViewMode";
         public const string PrefsManagerSplitWidth = PrefsPrefix + "ManagerSplitWidth";
+        public const string PrefsUseSigning = PrefsPrefix + "UseSigning";
 
         // File templates
         public const string RuntimeAsmdefSuffix = "";
