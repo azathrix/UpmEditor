@@ -32,6 +32,7 @@ namespace  Azathrix.UpmEditor.Editor.Core
         public AuthorInfo author = new AuthorInfo();
         public Dictionary<string, string> dependencies = new Dictionary<string, string>();
         public bool hideInEditor = false; // true = Hidden, false = Visible
+        public List<SampleInfo> samples = new List<SampleInfo>();
 
         [Serializable]
         public class AuthorInfo
@@ -39,6 +40,14 @@ namespace  Azathrix.UpmEditor.Editor.Core
             public string name = "";
             public string email = "";
             public string url = "";
+        }
+
+        [Serializable]
+        public class SampleInfo
+        {
+            public string displayName = "";
+            public string description = "";
+            public string path = "";
         }
 
         /// <summary>
@@ -65,7 +74,13 @@ namespace  Azathrix.UpmEditor.Editor.Core
                     url = author.url
                 },
                 dependencies = new Dictionary<string, string>(dependencies),
-                hideInEditor = hideInEditor
+                hideInEditor = hideInEditor,
+                samples = samples.ConvertAll(s => new SampleInfo
+                {
+                    displayName = s.displayName,
+                    description = s.description,
+                    path = s.path
+                })
             };
             return clone;
         }

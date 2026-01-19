@@ -121,6 +121,9 @@ namespace  Azathrix.UpmEditor.Editor.Services
                 data.dependencies = ParseDependencies(depsJson);
             }
 
+            // Parse samples array
+            data.samples = ParseSamples(json);
+
             return data;
         }
 
@@ -193,8 +196,30 @@ namespace  Azathrix.UpmEditor.Editor.Services
                 }
                 sb.AppendLine(string.Join(",\n", deps));
             }
-            sb.AppendLine("    }");
+            sb.Append("    }");
 
+            // Samples
+            if (data.samples != null && data.samples.Count > 0)
+            {
+                sb.AppendLine(",");
+                sb.AppendLine("    \"samples\": [");
+                for (int i = 0; i < data.samples.Count; i++)
+                {
+                    var sample = data.samples[i];
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            \"displayName\": \"{EscapeJson(sample.displayName)}\",");
+                    sb.AppendLine($"            \"description\": \"{EscapeJson(sample.description)}\",");
+                    sb.AppendLine($"            \"path\": \"{EscapeJson(sample.path)}\"");
+                    sb.Append("        }");
+                    if (i < data.samples.Count - 1)
+                        sb.AppendLine(",");
+                    else
+                        sb.AppendLine();
+                }
+                sb.Append("    ]");
+            }
+
+            sb.AppendLine();
             sb.AppendLine("}");
             return sb.ToString();
         }
@@ -335,6 +360,59 @@ namespace  Azathrix.UpmEditor.Editor.Services
                         }
                         else currentValue.Append(c);
                         break;
+                }
+            }
+
+            return result;
+        }
+
+        private static List<UPMPackageData.SampleInfo> ParseSamples(string json)
+        {
+            var result = new List<UPMPackageData.SampleInfo>();
+            var idx = json.IndexOf("\"samples\"");
+            if (idx < 0) return result;
+
+            var bracketStart = json.IndexOf('[', idx);
+            if (bracketStart < 0) return result;
+
+            // 找到匹配的 ]
+            var depth = 1;
+            var bracketEnd = bracketStart + 1;
+            while (bracketEnd < json.Length && depth > 0)
+            {
+                if (json[bracketEnd] == '[') depth++;
+                else if (json[bracketEnd] == ']') depth--;
+                bracketEnd++;
+            }
+            if (depth != 0) return result;
+
+            var arrayContent = json.Substring(bracketStart + 1, bracketEnd - bracketStart - 2);
+
+            // 解析每个 sample 对象
+            var objDepth = 0;
+            var objStart = -1;
+            for (int i = 0; i < arrayContent.Length; i++)
+            {
+                if (arrayContent[i] == '{')
+                {
+                    if (objDepth == 0) objStart = i;
+                    objDepth++;
+                }
+                else if (arrayContent[i] == '}')
+                {
+                    objDepth--;
+                    if (objDepth == 0 && objStart >= 0)
+                    {
+                        var objJson = arrayContent.Substring(objStart, i - objStart + 1);
+                        var sample = new UPMPackageData.SampleInfo
+                        {
+                            displayName = GetJsonStringValue(objJson, "displayName"),
+                            description = GetJsonStringValue(objJson, "description"),
+                            path = GetJsonStringValue(objJson, "path")
+                        };
+                        result.Add(sample);
+                        objStart = -1;
+                    }
                 }
             }
 
